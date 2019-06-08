@@ -14,7 +14,7 @@ public class SimpleProducerDemo {
         BasicProperties basicProperties = new BasicProperties();
 
         KafkaProducer<String, String> producer = new KafkaProducer<>(basicProperties.toProperties());
-        ProducerRecord<String, String> record = new ProducerRecord<>("first_topic", "Hello Kafka From Java");
+        ProducerRecord<String, String> record = new ProducerRecord<>("first_topic", "Hello Kafka From Java2");
 
         Future<RecordMetadata> send = producer.send(record);
 
