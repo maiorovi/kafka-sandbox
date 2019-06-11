@@ -6,6 +6,8 @@ import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
+import org.elasticsearch.action.bulk.BulkRequest;
+import org.elasticsearch.action.bulk.BulkResponse;
 import org.elasticsearch.action.index.IndexRequest;
 import org.elasticsearch.action.index.IndexResponse;
 import org.elasticsearch.client.RequestOptions;
@@ -33,7 +35,9 @@ public class ElastiSearchConsumer {
         try {
             while (true) {
                 ConsumerRecords<String, String> records = kafkaConsumer.poll(Duration.ofMillis(100));
-                LOG.info("Received " + records.count() + " records");
+                int count = records.count();
+                LOG.info("Received " + count + " records");
+                BulkRequest bulkRequest = new BulkRequest();
                 for (ConsumerRecord<String, String> record : records) {
                     //kafka generic ID
                     String id = record.topic() + "_" + record.partition() + "_" +record.offset();
@@ -41,17 +45,17 @@ public class ElastiSearchConsumer {
                     IndexRequest indexRequest = new IndexRequest("twitter")
                             .id(id) //id is for make request idempotent
                             .source(record.value(), XContentType.JSON);
-
-                    IndexResponse response = highLevelClient.index(indexRequest, RequestOptions.DEFAULT);
-
-                    LOG.info("Inserted tweet with id {} ", response.getId());
-                    Thread.sleep(10);
+                    bulkRequest.add(indexRequest);
                 }
 
-                LOG.info("Committing offsets...");
-                kafkaConsumer.commitSync();
-                LOG.info("Offsets have been committed");
-                Thread.sleep(1000);
+                if (count > 0) {
+                    BulkResponse bulk = highLevelClient.bulk(bulkRequest, RequestOptions.DEFAULT);
+
+                    LOG.info("Committing offsets...");
+                    kafkaConsumer.commitSync();
+                    LOG.info("Offsets have been committed");
+                    Thread.sleep(1000);
+                }
             }
         } catch (Exception e) {
 
