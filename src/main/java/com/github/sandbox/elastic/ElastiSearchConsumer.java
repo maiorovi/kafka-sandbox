@@ -2,6 +2,7 @@ package com.github.sandbox.elastic;
 
 import com.github.sandbox.consumer.ConsumerProperties;
 import org.apache.http.HttpHost;
+import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
@@ -18,6 +19,7 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.time.Duration;
 import java.util.Collections;
+import java.util.Properties;
 
 public class ElastiSearchConsumer {
     private static final Logger LOG = LoggerFactory.getLogger(ElastiSearchConsumer.class);
@@ -31,17 +33,25 @@ public class ElastiSearchConsumer {
         try {
             while (true) {
                 ConsumerRecords<String, String> records = kafkaConsumer.poll(Duration.ofMillis(100));
-
+                LOG.info("Received " + records.count() + " records");
                 for (ConsumerRecord<String, String> record : records) {
+                    //kafka generic ID
+                    String id = record.topic() + "_" + record.partition() + "_" +record.offset();
                     //process record
                     IndexRequest indexRequest = new IndexRequest("twitter")
+                            .id(id) //id is for make request idempotent
                             .source(record.value(), XContentType.JSON);
 
                     IndexResponse response = highLevelClient.index(indexRequest, RequestOptions.DEFAULT);
 
                     LOG.info("Inserted tweet with id {} ", response.getId());
-                    Thread.sleep(2000);
+                    Thread.sleep(10);
                 }
+
+                LOG.info("Committing offsets...");
+                kafkaConsumer.commitSync();
+                LOG.info("Offsets have been committed");
+                Thread.sleep(1000);
             }
         } catch (Exception e) {
 
@@ -53,7 +63,11 @@ public class ElastiSearchConsumer {
     }
 
     private KafkaConsumer<String, String> createKafkaConsumer() {
-        return new KafkaConsumer<>(ConsumerProperties.newConsumerProperties("kafka-demo-elastic"));
+        Properties properties = ConsumerProperties.newConsumerProperties("kafka-demo-elastic");
+        properties.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, "false");
+        properties.put(ConsumerConfig.MAX_POLL_RECORDS_CONFIG, 10);
+
+        return new KafkaConsumer<>(properties);
     }
 
 
